@@ -137,8 +137,7 @@ header.masthead {
 #gameCanvas {
   width: 100%;
   display: block;
-  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 32px, transparent 32px, transparent 64px),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 32px, transparent 32px, transparent 64px);
+  background: #060816;
 }
 
 .hud {
@@ -165,7 +164,7 @@ header.masthead {
 .bars {
   display: grid;
   gap: 6px;
-  width: 220px;
+  width: 260px;
 }
 
 .bar {
@@ -188,8 +187,8 @@ header.masthead {
 }
 
 .bar.health::before,
-.bar.mana::before,
-.bar.dash::before {
+.bar.armor::before,
+.bar.ammo::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -198,12 +197,16 @@ header.masthead {
   transition: width 120ms ease;
 }
 
-.bar.mana::before {
-  background: linear-gradient(120deg, rgba(6, 182, 212, 0.85), rgba(16, 185, 129, 0.85));
+.bar.health::before {
+  background: linear-gradient(120deg, rgba(239, 68, 68, 0.95), rgba(248, 113, 113, 0.9));
 }
 
-.bar.dash::before {
-  background: linear-gradient(120deg, rgba(16, 185, 129, 0.85), rgba(59, 130, 246, 0.85));
+.bar.armor::before {
+  background: linear-gradient(120deg, rgba(59, 130, 246, 0.9), rgba(56, 189, 248, 0.9));
+}
+
+.bar.ammo::before {
+  background: linear-gradient(120deg, rgba(234, 179, 8, 0.95), rgba(251, 191, 36, 0.85));
 }
 
 .chip {
