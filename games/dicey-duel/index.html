@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dicey Duel | Rapidfire dice battler</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b132b;
+      --card: #0f2039;
+      --accent: #38bdf8;
+      --border: #1e293b;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 30% 20%, rgba(56, 189, 248, 0.09), transparent 40%), var(--bg);
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+    }
+    .sheet {
+      width: min(720px, 92vw);
+      background: linear-gradient(140deg, var(--card), #0b132b);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+      display: grid;
+      gap: 16px;
+    }
+    h1 { margin: 0; }
+    .muted { color: var(--muted); }
+    .dice-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .die {
+      width: 64px;
+      height: 64px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(56, 189, 248, 0.08);
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .controls { display: flex; gap: 12px; flex-wrap: wrap; }
+    button {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      background: rgba(56, 189, 248, 0.12);
+      color: #e2e8f0;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:hover { background: rgba(56, 189, 248, 0.18); }
+    button.secondary { background: #0b132b; }
+    .score-line { display: flex; gap: 16px; align-items: baseline; }
+    .log {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      background: #0b132b;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 120px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <article class="sheet">
+    <header>
+      <p class="muted">Real-time score attack</p>
+      <h1>Dicey Duel</h1>
+      <p class="muted">Lock dice to build combos, then cash in before your rival does.</p>
+    </header>
+
+    <div class="dice-row" id="dice"></div>
+    <div class="score-line">
+      <div><strong id="score">0</strong> score</div>
+      <div class="muted">Streak: <span id="streak">0</span> · Rival pace: <span id="pace">5</span></div>
+    </div>
+
+    <div class="controls">
+      <button id="roll">Roll dice</button>
+      <button id="lock" class="secondary">Lock high</button>
+      <button id="cash" class="secondary">Cash out combo</button>
+      <button id="reset" class="secondary">Reset</button>
+    </div>
+
+    <section>
+      <h3>Commentary</h3>
+      <div id="log" class="log" aria-live="polite"></div>
+    </section>
+  </article>
+
+  <script>
+    const diceEl = document.getElementById("dice");
+    const logEl = document.getElementById("log");
+
+    const state = {
+      dice: Array.from({ length: 5 }, () => 1),
+      locked: new Set(),
+      score: 0,
+      streak: 0,
+      rivalPace: 5,
+      lastRoll: [],
+    };
+
+    const writeLog = (msg) => {
+      const time = new Date().toLocaleTimeString();
+      logEl.textContent = `[${time}] ${msg}\n${logEl.textContent}`;
+    };
+
+    const renderDice = () => {
+      diceEl.innerHTML = "";
+      state.dice.forEach((value, idx) => {
+        const die = document.createElement("div");
+        die.className = "die";
+        die.textContent = state.locked.has(idx) ? `🔒${value}` : value;
+        die.addEventListener("click", () => toggleLock(idx));
+        diceEl.appendChild(die);
+      });
+      document.getElementById("score").textContent = state.score;
+      document.getElementById("streak").textContent = state.streak;
+      document.getElementById("pace").textContent = state.rivalPace;
+    };
+
+    const toggleLock = (idx) => {
+      if (state.locked.has(idx)) {
+        state.locked.delete(idx);
+        writeLog(`Unlocked die ${idx + 1}.`);
+      } else {
+        state.locked.add(idx);
+        writeLog(`Locked die ${idx + 1}.`);
+      }
+      renderDice();
+    };
+
+    const roll = () => {
+      state.lastRoll = state.dice.map((value, idx) => (state.locked.has(idx) ? value : 1 + Math.floor(Math.random() * 6)));
+      state.dice = [...state.lastRoll];
+      writeLog("Rolled dice.");
+      decayPace();
+      renderDice();
+    };
+
+    const lockHigh = () => {
+      const max = Math.max(...state.dice);
+      state.dice.forEach((value, idx) => {
+        if (value === max) state.locked.add(idx);
+      });
+      writeLog(`Locked every ${max}.`);
+      renderDice();
+    };
+
+    const cashOut = () => {
+      const combo = state.dice.reduce((sum, value, idx) => sum + (state.locked.has(idx) ? value * 2 : value), 0);
+      state.score += combo;
+      state.streak += 1;
+      state.locked.clear();
+      writeLog(`Cashed combo for +${combo} points.`);
+      bumpPace();
+      renderDice();
+    };
+
+    const decayPace = () => {
+      state.rivalPace = Math.max(0, state.rivalPace - 1);
+    };
+
+    const bumpPace = () => {
+      state.rivalPace += Math.floor(1 + Math.random() * 3);
+    };
+
+    const reset = () => {
+      state.dice = Array.from({ length: 5 }, () => 1);
+      state.locked.clear();
+      state.score = 0;
+      state.streak = 0;
+      state.rivalPace = 5;
+      writeLog("Reset the duel.");
+      renderDice();
+    };
+
+    document.getElementById("roll").addEventListener("click", roll);
+    document.getElementById("lock").addEventListener("click", lockHigh);
+    document.getElementById("cash").addEventListener("click", cashOut);
+    document.getElementById("reset").addEventListener("click", reset);
+
+    writeLog("Welcome to Dicey Duel. Roll and cash out before the rival pace overtakes you.");
+    renderDice();
+  </script>
+</body>
+</html>

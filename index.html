@@ -23,6 +23,9 @@
       <button id="toggleMetricsButton" type="button" class="ghost-button" aria-expanded="false">
         Debug HUD
       </button>
+      <button id="debugMenuButton" type="button" class="ghost-button" aria-expanded="false">
+        Debug menu
+      </button>
     </div>
   </header>
 
@@ -171,6 +174,69 @@
         <summary>Event log</summary>
         <pre id="eventLog" class="log-output" aria-live="polite"></pre>
       </details>
+    </section>
+
+    <section id="debugMenu" class="debug-menu" hidden>
+      <div class="debug-menu__header">
+        <div>
+          <p class="eyebrow">Universal debug</p>
+          <h3>Debug control room</h3>
+          <p class="muted">Surface issues for developers, QA, and players while keeping gameplay stable.</p>
+        </div>
+        <div class="debug-menu__summary">
+          <span id="debugStatus" class="chip success">Stable</span>
+          <div class="debug-counts">
+            <div>
+              <span class="label">Issues</span>
+              <span id="debugIssueCount" class="value">0</span>
+            </div>
+            <div>
+              <span class="label">Flags</span>
+              <span id="debugFlagCount" class="value">0</span>
+            </div>
+            <div>
+              <span class="label">Latency</span>
+              <span id="debugLatency" class="value">-</span>
+            </div>
+            <div>
+              <span class="label">Uptime</span>
+              <span id="debugUptime" class="value">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="debug-menu__grid">
+        <div class="debug-card">
+          <div class="card-heading">
+            <h4>Active flags</h4>
+            <p class="muted">Flags summarize blockers, risky filters, and placeholder launches.</p>
+          </div>
+          <ul id="debugFlagList" class="flag-list"></ul>
+        </div>
+        <div class="debug-card">
+          <div class="card-heading">
+            <h4>Last signals</h4>
+            <p class="muted">What the launcher recently recorded.</p>
+          </div>
+          <p><strong>Last issue:</strong> <span id="debugLastIssue">No issues captured yet.</span></p>
+          <p><strong>Last error:</strong> <span id="debugLastError">No errors thrown.</span></p>
+          <div class="debug-actions">
+            <button id="debugCopyLogButton" type="button" class="ghost-button">Copy session log</button>
+            <button id="debugHealthCheckButton" type="button" class="ghost-button">Health sweep</button>
+            <button id="debugClearFlagsButton" type="button" class="ghost-button">Clear flags</button>
+          </div>
+        </div>
+        <div class="debug-card">
+          <div class="card-heading">
+            <h4>Test utilities</h4>
+            <p class="muted">Trigger guardrails for developers and playtesters.</p>
+          </div>
+          <div class="debug-actions">
+            <button id="debugSimulateErrorButton" type="button" class="ghost-button">Simulate error</button>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
