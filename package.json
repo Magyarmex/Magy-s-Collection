@@ -1,0 +1,12 @@
+{
+  "name": "d-d-but-bad",
+  "version": "1.0.0",
+  "description": "Web-based arcade with a central menu for launching browser games.",
+  "type": "module",
+  "scripts": {
+    "test": "node tools/run-tests.js"
+  },
+  "keywords": ["games", "web", "arcade", "menu"],
+  "author": "",
+  "license": "MIT"
+}
