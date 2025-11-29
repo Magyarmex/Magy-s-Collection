@@ -1,5 +1,15 @@
 export const games = [
   {
+    id: "arcane-rift",
+    title: "Arcane Rift: Live Run",
+    description: "Playable roguelike slice with waves, relic drafts, and telemetry-rich debugging.",
+    launchPath: "games/roguelike-3d/index.html",
+    status: "beta",
+    estimatedSession: "8-12 min",
+    tags: ["roguelike", "3d", "fantasy", "shooter"],
+    lastUpdated: "2024-07-01",
+  },
+  {
     id: "sample",
     title: "Sample Dungeon Dash",
     description: "A placeholder scene proving the pipeline works. Replace this with your first real game.",
