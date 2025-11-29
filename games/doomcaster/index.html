@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doomcaster | Arena survival</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1220;
+      --card: #0f172a;
+      --accent: #7c3aed;
+      --muted: #9ca3af;
+      --border: #1f2937;
+      --surface: rgba(124, 58, 237, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.08), transparent 30%),
+        radial-gradient(circle at 80% 10%, rgba(34, 197, 94, 0.08), transparent 25%),
+        var(--bg);
+      color: #e5e7eb;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+    }
+    .card {
+      width: min(960px, 90vw);
+      background: linear-gradient(160deg, var(--card), #0b1220 40%, var(--card));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      padding: 24px;
+      display: grid;
+      gap: 24px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 14px;
+      color: #c084fc;
+    }
+    h1 { margin: 0; }
+    .muted { color: var(--muted); }
+    .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .panel {
+      background: #0b1220;
+      border: 1px solid var(--border);
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    }
+    ul { margin: 0; padding-left: 20px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    .button {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: #f8fafc;
+      padding: 10px 16px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .button.secondary { background: #111827; }
+    .meter {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    }
+    .meter strong { display: block; font-size: 20px; }
+    .log { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body>
+  <article class="card">
+    <div>
+      <span class="pill">Arena survival</span>
+      <h1>Doomcaster</h1>
+      <p class="muted">
+        A spell-slinger trapped in a cursed arena. Route mana into unstable spells, purge corruption, and chain crits to stay
+        ahead of the doom clock.
+      </p>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Quick rules</h2>
+        <ul>
+          <li>Spend mana on <strong>Burst</strong> (cheap), <strong>Nova</strong> (wide), or <strong>Hex</strong> (stacking).</li>
+          <li>After each wave, pick a modifier: crit chance, cooldown skip, or corruption purge.</li>
+          <li>Bank score streaks by exiting early; greed raises the doom clock.</li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Key bindings</h2>
+        <ul>
+          <li><strong>Click</strong>: Cast the highlighted spell.</li>
+          <li><strong>Space</strong>: Swap to the next spell.</li>
+          <li><strong>R</strong>: Burn all mana to purge corruption.</li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="panel">
+      <h2>Live counters</h2>
+      <div class="meter" id="meters">
+        <div><strong id="wave">1</strong><span class="muted">Wave</span></div>
+        <div><strong id="mana">5</strong><span class="muted">Mana</span></div>
+        <div><strong id="doom">12</strong><span class="muted">Doom clock</span></div>
+        <div><strong id="score">0</strong><span class="muted">Score</span></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="button" id="advance">Advance wave</button>
+      <button class="button secondary" id="channel">Channel mana</button>
+      <button class="button secondary" id="purge">Purge corruption</button>
+    </div>
+
+    <section class="panel">
+      <h2>Activity log</h2>
+      <pre class="log" id="log" aria-live="polite"></pre>
+    </section>
+  </article>
+
+  <script>
+    const state = {
+      wave: 1,
+      mana: 5,
+      doom: 12,
+      score: 0,
+      seed: Math.random().toString(16).slice(2, 7),
+    };
+
+    const log = (message) => {
+      const target = document.getElementById("log");
+      const now = new Date().toLocaleTimeString();
+      target.textContent = `[${now}] ${message}\n${target.textContent}`;
+    };
+
+    const updateMeters = () => {
+      document.getElementById("wave").textContent = state.wave;
+      document.getElementById("mana").textContent = state.mana;
+      document.getElementById("doom").textContent = state.doom;
+      document.getElementById("score").textContent = state.score;
+    };
+
+    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+    const advance = () => {
+      state.wave += 1;
+      const manaGain = Math.max(1, Math.floor(Math.random() * 3));
+      state.mana = clamp(state.mana + manaGain, 0, 15);
+      state.doom = clamp(state.doom - 1, 1, 20);
+      state.score += Math.floor(state.wave * (2 + Math.random() * 4));
+      log(`Advanced to wave ${state.wave}. Mana +${manaGain}, doom ticking...`);
+      updateMeters();
+    };
+
+    const channel = () => {
+      const roll = Math.random();
+      if (roll > 0.7) {
+        const crit = 6 + Math.floor(Math.random() * 6);
+        state.score += crit;
+        state.mana = clamp(state.mana + 2, 0, 15);
+        log(`Critical surge! +${crit} score, mana siphoned.`);
+      } else {
+        state.mana = clamp(state.mana + 1, 0, 15);
+        log("Channeled mana safely.");
+      }
+      updateMeters();
+    };
+
+    const purge = () => {
+      const cost = Math.min(state.mana, 3);
+      state.mana -= cost;
+      state.doom = clamp(state.doom + 3, 0, 24);
+      state.score += cost * 2;
+      log(`Purged corruption at cost ${cost} mana. Doom eased.`);
+      updateMeters();
+    };
+
+    document.getElementById("advance").addEventListener("click", advance);
+    document.getElementById("channel").addEventListener("click", channel);
+    document.getElementById("purge").addEventListener("click", purge);
+
+    log(`Doomcaster ready. Seed ${state.seed}. Hold out as long as you can.`);
+    updateMeters();
+  </script>
+</body>
+</html>
