@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arcade Launcher | D&D but bad</title>
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="branding">
+      <div class="logo" aria-hidden="true">🎮</div>
+      <div>
+        <p class="eyebrow">Web arcade</p>
+        <h1>D&D but bad</h1>
+        <p class="tagline">A cozy home for small, experimental web games.</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="refreshButton" type="button" class="ghost-button" aria-label="Refresh game list">
+        Refresh
+      </button>
+      <button id="toggleMetricsButton" type="button" class="ghost-button" aria-expanded="false">
+        Metrics
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="pill pulse">Now with richer layout + debug tools</p>
+        <h2>Pick a prototype and press play</h2>
+        <p>
+          Each tile below is a launch pad to a small browser-based game. New experiments will
+          live here as they are built.
+        </p>
+        <div class="utility-row" aria-live="polite">
+          <div class="utility-chip">
+            <span class="label">Active filters</span>
+            <span id="activeFilters" class="value">All</span>
+          </div>
+          <div class="utility-chip">
+            <span class="label">Last interaction</span>
+            <span id="lastInteraction" class="value">-</span>
+          </div>
+          <div class="utility-chip">
+            <span class="label">Render count</span>
+            <span id="renderCount" class="value">0</span>
+          </div>
+        </div>
+      </div>
+      <div class="status-panel" aria-live="polite">
+        <div class="status-row">
+          <span class="label">Loaded games</span>
+          <span id="loadedCount" class="value">0</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Warnings</span>
+          <span id="warningCount" class="value value-warn">0</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Errors</span>
+          <span id="errorCount" class="value value-error">0</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Last refresh</span>
+          <span id="lastRefresh" class="value">-</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="list-toolbar" aria-label="Game filters">
+      <div class="filters">
+        <label>
+          <span class="sr-only">Filter by status</span>
+          <select id="statusFilter">
+            <option value="all">All statuses</option>
+            <option value="prototype">Prototype</option>
+            <option value="beta">Beta</option>
+            <option value="released">Released</option>
+          </select>
+        </label>
+        <label>
+          <span class="sr-only">Sort games</span>
+          <select id="sortSelect">
+            <option value="recent">Sort: Recently updated</option>
+            <option value="title">Sort: Title (A-Z)</option>
+            <option value="status">Sort: Status</option>
+          </select>
+        </label>
+        <label class="search">
+          <span class="sr-only">Search games</span>
+          <input id="searchInput" type="search" placeholder="Search by title or tag" autocomplete="off" />
+        </label>
+      </div>
+      <div class="legend" aria-hidden="true">
+        <span class="pill status-prototype">Prototype</span>
+        <span class="pill status-beta">Beta</span>
+        <span class="pill status-released">Released</span>
+      </div>
+    </section>
+
+    <section class="filter-chips" aria-live="polite">
+      <div class="chip" id="persistedNotice" hidden>Filters restored</div>
+      <div class="chip" id="healthChip">Diagnostics idle</div>
+      <div class="chip" id="searchChip" hidden></div>
+      <div class="chip" id="statusChip" hidden></div>
+    </section>
+
+    <section>
+      <ul id="gameList" class="game-grid" aria-live="polite" aria-label="Available games"></ul>
+      <div id="emptyState" class="empty-state" hidden>
+        <p>No games match the current filters.</p>
+        <button id="clearFiltersButton" type="button" class="ghost-button">Clear filters</button>
+      </div>
+    </section>
+
+    <section id="metricsPanel" class="metrics" hidden>
+      <h3>Debug metrics</h3>
+      <dl class="metrics-grid">
+        <div>
+          <dt>Page ready (ms)</dt>
+          <dd id="metricPageReady">-</dd>
+        </div>
+        <div>
+          <dt>Last render (ms)</dt>
+          <dd id="metricRender">-</dd>
+        </div>
+        <div>
+          <dt>Warnings</dt>
+          <dd id="metricWarnings">0</dd>
+        </div>
+        <div>
+          <dt>Errors</dt>
+          <dd id="metricErrors">0</dd>
+        </div>
+        <div>
+          <dt>Cards rendered</dt>
+          <dd id="metricCards">0</dd>
+        </div>
+        <div>
+          <dt>Filter latency (ms)</dt>
+          <dd id="metricFilter">-</dd>
+        </div>
+      </dl>
+      <details>
+        <summary>Event log</summary>
+        <pre id="eventLog" class="log-output" aria-live="polite"></pre>
+      </details>
+    </section>
+  </main>
+
+  <template id="gameCardTemplate">
+    <li class="game-card">
+      <div class="card-header">
+        <div class="card-status" data-status></div>
+        <span class="pill" data-status-label></span>
+      </div>
+      <h3 data-title></h3>
+      <p class="description" data-description></p>
+      <div class="card-meta">
+        <span class="tag" data-tags></span>
+        <span class="tag" data-duration></span>
+      </div>
+      <p class="meta-line" data-updated></p>
+      <div class="card-actions">
+        <a class="primary" data-launch target="_blank" rel="noopener">Launch</a>
+        <button class="ghost-button" data-report type="button">Report</button>
+      </div>
+    </li>
+  </template>
+
+  <dialog id="reportDialog">
+    <form method="dialog">
+      <header>
+        <h3>Report an issue</h3>
+        <p class="muted">Flag problems so the next player has a smoother run.</p>
+      </header>
+      <label class="stack">
+        <span>Issue</span>
+        <textarea id="reportText" rows="4" required placeholder="What went wrong?"></textarea>
+      </label>
+      <menu class="dialog-actions">
+        <button value="cancel" class="ghost-button">Cancel</button>
+        <button value="submit" class="primary">Submit</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <footer class="site-footer">
+    <p>Made with HTML, CSS, and vanilla JavaScript. Add your game under <code>games/</code> and register it in <code>scripts/games.js</code>.</p>
+  </footer>
+
+  <script type="module" src="scripts/main.js"></script>
+</body>
+</html>
