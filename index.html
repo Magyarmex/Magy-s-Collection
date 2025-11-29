@@ -3,50 +3,53 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Magy's Collection | Arcade Launcher</title>
+  <title>Retro Arcade Nexus | D&D but bad</title>
   <link rel="stylesheet" href="styles/main.css" />
 </head>
 <body>
   <header class="site-header">
     <div class="branding">
-      <div class="logo" aria-hidden="true">🎮</div>
+      <div class="logo" aria-hidden="true" aria-label="Pixel portal">🕹️</div>
       <div>
-        <p class="eyebrow">Magy's Collection</p>
-        <h1>Magy's Collection</h1>
-        <p class="tagline">A curated shelf of experimental fantasy shooters.</p>
+        <p class="eyebrow">Retro Web Arcade</p>
+        <h1>Bit-Crafted Realms</h1>
+        <p class="tagline">Enter a pixel portal of weird experiments and homebrew quests.</p>
       </div>
     </div>
     <div class="header-actions">
       <button id="refreshButton" type="button" class="ghost-button" aria-label="Refresh game list">
-        Refresh
+        Respawn List
       </button>
       <button id="toggleMetricsButton" type="button" class="ghost-button" aria-expanded="false">
-        Metrics
-      </button>
-      <button id="debugMenuButton" type="button" class="ghost-button" aria-expanded="false">
-        Debug menu
+        Debug HUD
       </button>
     </div>
   </header>
 
   <main>
     <section class="hero">
-      <div class="hero-copy">
-        <p class="pill pulse">Now featuring Arcane Rift: Doomcaster</p>
-        <h2>Load in and rip through the Rift</h2>
-        <p>Start the fantasy-Doom run, blast demons, and watch the telemetry feed update in real time.</p>
-        <div class="utility-row" aria-live="polite">
-          <div class="utility-chip">
-            <span class="label">Active filters</span>
-            <span id="activeFilters" class="value">All</span>
-          </div>
-          <div class="utility-chip">
-            <span class="label">Last interaction</span>
-            <span id="lastInteraction" class="value">-</span>
-          </div>
-          <div class="utility-chip">
-            <span class="label">Render count</span>
-            <span id="renderCount" class="value">0</span>
+      <div class="crt">
+        <div class="scanline"></div>
+        <div class="hero-copy">
+          <p class="pill pulse">8-bit tuned · Debug-ready</p>
+          <h2>Load a quest, mash start</h2>
+          <p>
+            Kick off tiny browser adventures from a neon control panel. Swap filters, spot errors fast, and
+            keep the arcade humming.
+          </p>
+          <div class="utility-row" aria-live="polite">
+            <div class="utility-chip">
+              <span class="label">Active filters</span>
+              <span id="activeFilters" class="value">All</span>
+            </div>
+            <div class="utility-chip">
+              <span class="label">Last interaction</span>
+              <span id="lastInteraction" class="value">-</span>
+            </div>
+            <div class="utility-chip">
+              <span class="label">Render count</span>
+              <span id="renderCount" class="value">0</span>
+            </div>
           </div>
         </div>
       </div>
@@ -66,6 +69,10 @@
         <div class="status-row">
           <span class="label">Last refresh</span>
           <span id="lastRefresh" class="value">-</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Last issue</span>
+          <span id="lastIssue" class="value">None logged</span>
         </div>
       </div>
     </section>
@@ -143,74 +150,27 @@
           <dt>Filter latency (ms)</dt>
           <dd id="metricFilter">-</dd>
         </div>
+        <div>
+          <dt>Registry flags</dt>
+          <dd id="metricRegistryFlags">0</dd>
+        </div>
+        <div>
+          <dt>Missing elements</dt>
+          <dd id="metricMissing">0</dd>
+        </div>
+        <div>
+          <dt>Preference faults</dt>
+          <dd id="metricPrefs">0</dd>
+        </div>
+        <div>
+          <dt>Slow renders flagged</dt>
+          <dd id="metricSlowRenders">0</dd>
+        </div>
       </dl>
       <details>
         <summary>Event log</summary>
         <pre id="eventLog" class="log-output" aria-live="polite"></pre>
       </details>
-    </section>
-
-    <section id="debugMenu" class="debug-menu" hidden>
-      <div class="debug-menu__header">
-        <div>
-          <p class="eyebrow">Universal debug</p>
-          <h3>Debug control room</h3>
-          <p class="muted">Surface issues for developers, QA, and players while keeping gameplay stable.</p>
-        </div>
-        <div class="debug-menu__summary">
-          <span id="debugStatus" class="chip success">Stable</span>
-          <div class="debug-counts">
-            <div>
-              <span class="label">Issues</span>
-              <span id="debugIssueCount" class="value">0</span>
-            </div>
-            <div>
-              <span class="label">Flags</span>
-              <span id="debugFlagCount" class="value">0</span>
-            </div>
-            <div>
-              <span class="label">Latency</span>
-              <span id="debugLatency" class="value">-</span>
-            </div>
-            <div>
-              <span class="label">Uptime</span>
-              <span id="debugUptime" class="value">-</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="debug-menu__grid">
-        <div class="debug-card">
-          <div class="card-heading">
-            <h4>Active flags</h4>
-            <p class="muted">Flags summarize blockers, risky filters, and placeholder launches.</p>
-          </div>
-          <ul id="debugFlagList" class="flag-list"></ul>
-        </div>
-        <div class="debug-card">
-          <div class="card-heading">
-            <h4>Last signals</h4>
-            <p class="muted">What the launcher recently recorded.</p>
-          </div>
-          <p><strong>Last issue:</strong> <span id="debugLastIssue">No issues captured yet.</span></p>
-          <p><strong>Last error:</strong> <span id="debugLastError">No errors thrown.</span></p>
-          <div class="debug-actions">
-            <button id="debugCopyLogButton" type="button" class="ghost-button">Copy session log</button>
-            <button id="debugHealthCheckButton" type="button" class="ghost-button">Health sweep</button>
-            <button id="debugClearFlagsButton" type="button" class="ghost-button">Clear flags</button>
-          </div>
-        </div>
-        <div class="debug-card">
-          <div class="card-heading">
-            <h4>Test utilities</h4>
-            <p class="muted">Trigger guardrails for developers and playtesters.</p>
-          </div>
-          <div class="debug-actions">
-            <button id="debugSimulateErrorButton" type="button" class="ghost-button">Simulate error</button>
-          </div>
-        </div>
-      </div>
     </section>
   </main>
 

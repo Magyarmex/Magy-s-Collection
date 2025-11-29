@@ -1,4 +1,3 @@
-import { debugHub } from "./debug.js";
 import { games, statusLabels } from "./games.js";
 
 const metrics = {
@@ -9,8 +8,13 @@ const metrics = {
   cardsRendered: 0,
   warnings: 0,
   errors: 0,
+  missingElements: 0,
+  preferenceFaults: 0,
+  registryFlags: 0,
+  slowRenders: 0,
   lastInteraction: null,
   lastRefresh: null,
+  lastIssue: "None logged",
   log: [],
 };
 
@@ -26,92 +30,33 @@ const safeGetElement = (id) => {
   const el = document.getElementById(id);
   if (!el) {
     recordIssue("error", `Missing element #${id}`);
+    metrics.missingElements += 1;
   }
   return el;
 };
 
-function recordIssue(level, message, data = null) {
-  const entry = debugHub.record(level, message, data);
-  const { counters } = debugHub.snapshot();
+const recordIssue = (level, message, data = null) => {
+  const timestamp = new Date().toISOString();
+  const entry = { timestamp, level, message, data };
   metrics.log.push(entry);
-  metrics.errors = counters.error;
-  metrics.warnings = counters.warn;
+  if (level === "error") metrics.errors += 1;
+  if (level === "warn") metrics.warnings += 1;
+  metrics.lastIssue = `${level.toUpperCase()}: ${message}`;
   appendLog(entry);
   updateCounters();
+  updateStatusDetails();
   if (els.statusFilter && els.searchInput) {
     updateFilterChips({
       status: els.statusFilter.value,
       query: (els.searchInput.value ?? "").toLowerCase().trim(),
     });
   }
-  renderDebugMenu();
-  return entry;
-}
+};
 
 const appendLog = (entry) => {
   const target = els.eventLog ?? document.createElement("pre");
   target.textContent = `${target.textContent}${entry.timestamp} [${entry.level.toUpperCase()}] ${entry.message}\n`;
 };
-
-function renderDebugMenu() {
-  if (!els.debugMenu) return;
-
-  const snapshot = debugHub.snapshot();
-  const healthState = snapshot.counters.error > 0 ? "error" : snapshot.counters.warn > 0 ? "warn" : "success";
-  const statusLabel = healthState === "error" ? "Errors detected" : healthState === "warn" ? "Warnings active" : "Stable";
-
-  if (els.debugStatus) {
-    els.debugStatus.textContent = statusLabel;
-    els.debugStatus.className = `chip ${healthState}`;
-  }
-
-  if (els.debugIssueCount) els.debugIssueCount.textContent = snapshot.counters.total;
-  if (els.debugFlagCount) els.debugFlagCount.textContent = snapshot.flags.length;
-
-  if (els.debugLastIssue) {
-    els.debugLastIssue.textContent = snapshot.lastIssue
-      ? `${snapshot.lastIssue.message}`
-      : "No issues captured yet.";
-  }
-
-  if (els.debugLastError) {
-    els.debugLastError.textContent = snapshot.lastError
-      ? `${snapshot.lastError.message}`
-      : "No errors thrown.";
-  }
-
-  if (els.debugUptime) {
-    const uptime = Math.round(performance.now() - snapshot.startedAt);
-    els.debugUptime.textContent = `${uptime} ms`;
-  }
-
-  if (els.debugLatency) {
-    const latency = metrics.filterDuration || metrics.renderDuration || 0;
-    els.debugLatency.textContent = `${latency} ms`;
-  }
-
-  if (els.debugFlagList) {
-    els.debugFlagList.innerHTML = "";
-    if (!snapshot.flags.length) {
-      const li = document.createElement("li");
-      li.className = "muted";
-      li.textContent = "No active flags";
-      els.debugFlagList.appendChild(li);
-    } else {
-      snapshot.flags.forEach((flag) => {
-        const li = document.createElement("li");
-        li.dataset.severity = flag.severity;
-        li.innerHTML = `<strong>${flag.code}</strong>: ${flag.message}`;
-        if (flag.hint) {
-          const hint = document.createElement("small");
-          hint.textContent = flag.hint;
-          li.appendChild(hint);
-        }
-        els.debugFlagList.appendChild(li);
-      });
-    }
-  }
-}
 
 const formatTags = (tags = []) => (tags.length ? tags.join(", ") : "No tags yet");
 
@@ -123,87 +68,11 @@ const safeStatus = (status) => {
   return status;
 };
 
-async function exportDebugLog() {
-  const logText = debugHub
-    .snapshot()
-    .issues.map((entry) => `${entry.timestamp} [${entry.level.toUpperCase()}] ${entry.message}`)
-    .join("\n");
-
-  try {
-    await navigator.clipboard.writeText(logText || "No events captured yet.");
-    recordIssue("info", "Copied debug log to clipboard");
-  } catch (error) {
-    recordIssue("warn", "Clipboard unavailable for debug log", { message: error.message });
-  }
-}
-
-function simulateDebugError() {
-  try {
-    throw new Error("Simulated launcher error for diagnostics");
-  } catch (error) {
-    recordIssue("error", error.message, { source: "debug-menu" });
-    debugHub.flag({
-      code: "simulated-error",
-      severity: "warn",
-      message: "Simulated error captured",
-      hint: "Use this to validate alerting and event forwarding",
-      data: { source: "debug" },
-    });
-    renderDebugMenu();
-  }
-}
-
-function performHealthSweep() {
-  const snapshot = debugHub.snapshot();
-  if (snapshot.counters.error === 0) {
-    debugHub.flag({
-      code: "session-healthy",
-      severity: "info",
-      message: "No runtime errors detected",
-      hint: "Diagnostics will surface issues automatically",
-    });
-  } else {
-    debugHub.clearFlag("session-healthy");
-  }
-
-  if (snapshot.counters.warn > 3) {
-    debugHub.flag({
-      code: "excessive-warnings",
-      severity: "warn",
-      message: `${snapshot.counters.warn} warnings captured this session`,
-      hint: "Inspect the event log for patterns",
-    });
-  } else {
-    debugHub.clearFlag("excessive-warnings");
-  }
-
-  renderDebugMenu();
-}
-
-function clearDebugFlags() {
-  debugHub.snapshot().flags.forEach((flag) => debugHub.clearFlag(flag.code));
-  recordIssue("info", "Cleared debug flags");
-  renderDebugMenu();
-}
-
-function toggleDebugMenu() {
-  if (!els.debugMenu) return;
-  const isHidden = els.debugMenu.hasAttribute("hidden");
-  if (isHidden) {
-    els.debugMenu.removeAttribute("hidden");
-  } else {
-    els.debugMenu.setAttribute("hidden", "");
-  }
-  if (els.debugMenuButton) {
-    els.debugMenuButton.setAttribute("aria-expanded", String(!isHidden));
-  }
-  renderDebugMenu();
-}
-
 const readPreference = (key) => {
   try {
     return window.localStorage.getItem(key);
   } catch (error) {
+    metrics.preferenceFaults += 1;
     recordIssue("warn", "Unable to read preference", { key, message: error.message });
     return null;
   }
@@ -213,6 +82,7 @@ const writePreference = (key, value) => {
   try {
     window.localStorage.setItem(key, value);
   } catch (error) {
+    metrics.preferenceFaults += 1;
     recordIssue("warn", "Unable to persist preference", { key, message: error.message });
   }
 };
@@ -299,39 +169,33 @@ const renderGames = () => {
     els.gameList.appendChild(cardNode);
   });
 
-  if (filtered.length === 0) {
-    debugHub.flag({
-      code: "empty-results",
-      severity: "warn",
-      message: "Current filters returned no games",
-      hint: "Use Clear filters to restore the full list",
-    });
-  } else {
-    debugHub.clearFlag("empty-results");
-  }
-
   els.emptyState.hidden = filtered.length !== 0;
   metrics.renderDuration = Math.round(performance.now() - start);
   metrics.filterDuration = metrics.renderDuration;
   metrics.renderCount += 1;
   metrics.cardsRendered = filtered.length;
+  if (metrics.renderDuration > 140) {
+    metrics.slowRenders += 1;
+    recordIssue("warn", `Render exceeded budget: ${metrics.renderDuration}ms`);
+  }
   metrics.lastRefresh = metrics.lastRefresh ?? new Date();
-  debugHub.metric("render.duration", metrics.renderDuration);
-  debugHub.metric("filter.duration", metrics.filterDuration);
-  debugHub.metric("render.count", metrics.renderCount);
-  debugHub.metric("render.cards", metrics.cardsRendered);
   updateCounters(filtered.length);
   updateFilterChips(filter);
   updateMetricsPanel();
   updateSessionInsights();
-  performHealthSweep();
-  renderDebugMenu();
+  updateStatusDetails();
 };
 
 const updateCounters = (loadedCount = games.length) => {
   els.loadedCount.textContent = loadedCount;
   els.warningCount.textContent = metrics.warnings;
   els.errorCount.textContent = metrics.errors;
+};
+
+const updateStatusDetails = () => {
+  if (els.lastIssue) {
+    els.lastIssue.textContent = metrics.lastIssue || "None logged";
+  }
 };
 
 const updateMetricsPanel = () => {
@@ -341,6 +205,10 @@ const updateMetricsPanel = () => {
   els.metricErrors.textContent = metrics.errors;
   els.metricCards.textContent = metrics.cardsRendered;
   els.metricFilter.textContent = metrics.filterDuration;
+  els.metricRegistryFlags.textContent = metrics.registryFlags;
+  els.metricMissing.textContent = metrics.missingElements;
+  els.metricPrefs.textContent = metrics.preferenceFaults;
+  els.metricSlowRenders.textContent = metrics.slowRenders;
 };
 
 const updateSessionInsights = () => {
@@ -354,8 +222,6 @@ const updateSessionInsights = () => {
 const trackInteraction = (reason) => {
   metrics.lastInteraction = new Date();
   recordIssue("info", `Interaction: ${reason}`);
-  debugHub.metric("session.lastInteraction", metrics.lastInteraction.toISOString());
-  debugHub.incrementMetric("session.interactions", 1);
   updateSessionInsights();
 };
 
@@ -390,28 +256,6 @@ const updateFilterChips = (filter) => {
     els.healthChip.textContent = "Diagnostics idle";
     els.healthChip.classList.add("success");
     els.healthChip.classList.remove("warn", "error");
-  }
-
-  if (metrics.errors > 0) {
-    debugHub.flag({
-      code: "session-errors",
-      severity: "error",
-      message: `${metrics.errors} errors captured`,
-      hint: "Open the debug menu for details",
-    });
-  } else {
-    debugHub.clearFlag("session-errors");
-  }
-
-  if (metrics.warnings > 0) {
-    debugHub.flag({
-      code: "session-warnings",
-      severity: "warn",
-      message: `${metrics.warnings} warnings recorded`,
-      hint: "Review event log for potential soft failures",
-    });
-  } else {
-    debugHub.clearFlag("session-warnings");
   }
 };
 
@@ -452,11 +296,11 @@ const openReportDialog = (game) => {
   );
 };
 
-  const bindEvents = () => {
-    els.statusFilter.addEventListener("change", () => {
-      writePreference(STORAGE_KEYS.status, els.statusFilter.value);
-      trackInteraction("Status filter change");
-      renderGames();
+const bindEvents = () => {
+  els.statusFilter.addEventListener("change", () => {
+    writePreference(STORAGE_KEYS.status, els.statusFilter.value);
+    trackInteraction("Status filter change");
+    renderGames();
   });
   els.sortSelect.addEventListener("change", () => {
     writePreference(STORAGE_KEYS.sort, els.sortSelect.value);
@@ -471,38 +315,20 @@ const openReportDialog = (game) => {
       renderGames();
     }, 120);
   });
-    els.refreshButton.addEventListener("click", () => {
-      recordIssue("info", "Manual refresh triggered");
-      metrics.lastRefresh = new Date();
-      updateSessionInsights();
-      renderGames();
-    });
-    els.clearFiltersButton.addEventListener("click", resetFilters);
-    els.toggleMetricsButton.addEventListener("click", toggleMetrics);
-    if (els.debugMenuButton) {
-      els.debugMenuButton.addEventListener("click", toggleDebugMenu);
-    }
-    if (els.debugCopyLogButton) {
-      els.debugCopyLogButton.addEventListener("click", exportDebugLog);
-    }
-    if (els.debugSimulateErrorButton) {
-      els.debugSimulateErrorButton.addEventListener("click", simulateDebugError);
-    }
-    if (els.debugHealthCheckButton) {
-      els.debugHealthCheckButton.addEventListener("click", () => {
-        recordIssue("info", "Manual health sweep triggered");
-        performHealthSweep();
-      });
-    }
-    if (els.debugClearFlagsButton) {
-      els.debugClearFlagsButton.addEventListener("click", clearDebugFlags);
-    }
-  };
+  els.refreshButton.addEventListener("click", () => {
+    recordIssue("info", "Manual refresh triggered");
+    metrics.lastRefresh = new Date();
+    updateSessionInsights();
+    renderGames();
+  });
+  els.clearFiltersButton.addEventListener("click", resetFilters);
+  els.toggleMetricsButton.addEventListener("click", toggleMetrics);
+};
 
-  const captureElements = () => {
-    els.loadedCount = safeGetElement("loadedCount");
-    els.warningCount = safeGetElement("warningCount");
-    els.errorCount = safeGetElement("errorCount");
+const captureElements = () => {
+  els.loadedCount = safeGetElement("loadedCount");
+  els.warningCount = safeGetElement("warningCount");
+  els.errorCount = safeGetElement("errorCount");
   els.gameList = safeGetElement("gameList");
   els.statusFilter = safeGetElement("statusFilter");
   els.sortSelect = safeGetElement("sortSelect");
@@ -516,6 +342,10 @@ const openReportDialog = (game) => {
   els.metricErrors = safeGetElement("metricErrors");
   els.metricCards = safeGetElement("metricCards");
   els.metricFilter = safeGetElement("metricFilter");
+  els.metricRegistryFlags = safeGetElement("metricRegistryFlags");
+  els.metricMissing = safeGetElement("metricMissing");
+  els.metricPrefs = safeGetElement("metricPrefs");
+  els.metricSlowRenders = safeGetElement("metricSlowRenders");
   els.eventLog = safeGetElement("eventLog");
   els.toggleMetricsButton = safeGetElement("toggleMetricsButton");
   els.refreshButton = safeGetElement("refreshButton");
@@ -527,20 +357,7 @@ const openReportDialog = (game) => {
   els.lastInteraction = safeGetElement("lastInteraction");
   els.renderCount = safeGetElement("renderCount");
   els.lastRefresh = safeGetElement("lastRefresh");
-  els.debugMenu = safeGetElement("debugMenu");
-  els.debugMenuButton = safeGetElement("debugMenuButton");
-  els.debugStatus = safeGetElement("debugStatus");
-  els.debugIssueCount = safeGetElement("debugIssueCount");
-  els.debugFlagCount = safeGetElement("debugFlagCount");
-  els.debugFlagList = safeGetElement("debugFlagList");
-  els.debugLastIssue = safeGetElement("debugLastIssue");
-  els.debugLastError = safeGetElement("debugLastError");
-  els.debugLatency = safeGetElement("debugLatency");
-  els.debugUptime = safeGetElement("debugUptime");
-  els.debugCopyLogButton = safeGetElement("debugCopyLogButton");
-  els.debugSimulateErrorButton = safeGetElement("debugSimulateErrorButton");
-  els.debugHealthCheckButton = safeGetElement("debugHealthCheckButton");
-  els.debugClearFlagsButton = safeGetElement("debugClearFlagsButton");
+  els.lastIssue = safeGetElement("lastIssue");
 };
 
 const loadPreferences = () => {
@@ -572,44 +389,56 @@ const ensureComingSoonWarning = () => {
   const missingGames = games.filter((game) => !validateGame(game));
   if (missingGames.length) {
     recordIssue("warn", `${missingGames.length} game entries failed validation.`);
-    debugHub.flag({
-      code: "invalid-games",
-      severity: "error",
-      message: `${missingGames.length} games failed validation`,
-      hint: "Check scripts/games.js for missing fields",
-    });
-  } else {
-    debugHub.clearFlag("invalid-games");
   }
 
-  const placeholderGames = games.filter(
-    (game) => game.launchPath && game.launchPath.includes("coming-soon")
-  );
-  placeholderGames.forEach((game) =>
-    recordIssue("warn", `Game ${game.id} has a placeholder launch path: ${game.launchPath}`)
-  );
-  if (placeholderGames.length) {
-    debugHub.flag({
-      code: "placeholder-launch",
-      severity: "warn",
-      message: `${placeholderGames.length} games point to coming-soon stubs`,
-      hint: "Update launchPath when assets exist",
+  games
+    .filter((game) => game.launchPath && game.launchPath.includes("coming-soon"))
+    .forEach((game) => {
+      metrics.registryFlags += 1;
+      recordIssue("warn", `Game ${game.id} has a placeholder launch path: ${game.launchPath}`);
     });
-  } else {
-    debugHub.clearFlag("placeholder-launch");
-  }
+};
+
+const flagRegistryAnomalies = () => {
+  const ids = new Set();
+  games.forEach((game) => {
+    if (ids.has(game.id)) {
+      metrics.registryFlags += 1;
+      recordIssue("warn", `Duplicate game id detected: ${game.id}`);
+    } else {
+      ids.add(game.id);
+    }
+
+    if (!game.launchPath || !game.launchPath.endsWith("index.html")) {
+      metrics.registryFlags += 1;
+      recordIssue("warn", `Launch path for ${game.id} may be misconfigured: ${game.launchPath}`);
+    }
+
+    if (!game.description || game.description.length < 12) {
+      metrics.registryFlags += 1;
+      recordIssue("warn", `Description is thin for ${game.id}`);
+    }
+  });
 };
 
 const bootstrap = () => {
   captureElements();
-  debugHub.subscribe(() => renderDebugMenu());
   loadPreferences();
   bindEvents();
   ensureComingSoonWarning();
+  flagRegistryAnomalies();
   renderGames();
   updateSessionInsights();
-  renderDebugMenu();
+  updateStatusDetails();
 };
+
+window.addEventListener("error", (event) => {
+  recordIssue("error", event.message, { source: event.filename, line: event.lineno });
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  recordIssue("error", `Unhandled rejection: ${event.reason}`);
+});
 
 window.addEventListener("DOMContentLoaded", bootstrap);
 

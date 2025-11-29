@@ -4,7 +4,7 @@ A lightweight web arcade shell that hosts multiple browser-based games behind a 
 
 ## Structure
 - `index.html`: Arcade landing page and game launcher with filter chips, sort controls, and a debug overlay.
-- `styles/`: Styling for the menu experience.
+- `styles/`: Styling for the neon-pixel menu experience.
 - `scripts/`: Client-side logic and registry of available games.
 - `games/`: Each game lives in its own subfolder with its own assets.
 - `tools/run-tests.js`: Lightweight validation that keeps the registry healthy.
@@ -26,10 +26,10 @@ Then open `http://localhost:8080` in your browser.
 4. Sort, search, and filter settings persist between reloads. Use the “Clear filters” button to reset them.
 
 ## Debugging and instrumentation
-- The Metrics panel (toggle in the header) tracks page readiness, render time, warnings, and errors.
+- The Metrics panel (toggle in the header) tracks page readiness, render time, warnings, errors, registry flags, and preference faults.
 - The event log captures launcher events, missing elements, validation issues, and manual refreshes.
 - A live chip bar surfaces search/status filters and warns when warnings or errors are detected.
-- Session insights track last interaction, render count, and render performance to ease QA.
+- Session insights track last interaction, render count, render performance, and the most recent issue to ease QA.
 - `window.__gameHubMetrics` exposes the metrics object for debugging in the devtools console.
 
 ## Tests
