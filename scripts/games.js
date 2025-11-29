@@ -10,6 +10,16 @@ export const games = [
     lastUpdated: "2024-06-01",
   },
   {
+    id: "dicey-duel",
+    title: "Dicey Duel",
+    description: "Speed-run a set of dice rolls and route the best score. A simple playground for future combat sims.",
+    launchPath: "games/sample/index.html",
+    status: "beta",
+    estimatedSession: "5 min",
+    tags: ["combat", "dice", "arcade"],
+    lastUpdated: "2024-06-15",
+  },
+  {
     id: "coming-soon",
     title: "Mystery Quest (Coming soon)",
     description: "Reserved slot for the next idea. Flesh it out and plug in your own assets.",

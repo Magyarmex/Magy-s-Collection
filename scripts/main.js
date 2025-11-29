@@ -3,9 +3,20 @@ import { games, statusLabels } from "./games.js";
 const metrics = {
   startedAt: performance.now(),
   renderDuration: 0,
+  filterDuration: 0,
+  renderCount: 0,
+  cardsRendered: 0,
   warnings: 0,
   errors: 0,
+  lastInteraction: null,
+  lastRefresh: null,
   log: [],
+};
+
+const STORAGE_KEYS = {
+  status: "arcade.statusFilter",
+  search: "arcade.searchQuery",
+  sort: "arcade.sort",
 };
 
 const els = {};
@@ -26,6 +37,12 @@ const recordIssue = (level, message, data = null) => {
   if (level === "warn") metrics.warnings += 1;
   appendLog(entry);
   updateCounters();
+  if (els.statusFilter && els.searchInput) {
+    updateFilterChips({
+      status: els.statusFilter.value,
+      query: (els.searchInput.value ?? "").toLowerCase().trim(),
+    });
+  }
 };
 
 const appendLog = (entry) => {
@@ -34,6 +51,31 @@ const appendLog = (entry) => {
 };
 
 const formatTags = (tags = []) => (tags.length ? tags.join(", ") : "No tags yet");
+
+const safeStatus = (status) => {
+  if (!statusLabels[status]) {
+    recordIssue("warn", `Unknown status '${status}', defaulting to prototype`);
+    return "prototype";
+  }
+  return status;
+};
+
+const readPreference = (key) => {
+  try {
+    return window.localStorage.getItem(key);
+  } catch (error) {
+    recordIssue("warn", "Unable to read preference", { key, message: error.message });
+    return null;
+  }
+};
+
+const writePreference = (key, value) => {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch (error) {
+    recordIssue("warn", "Unable to persist preference", { key, message: error.message });
+  }
+};
 
 const validateGame = (game) => {
   if (!game.id || !game.title || !game.launchPath) {
@@ -49,15 +91,19 @@ const hydrateGameCard = (game, template) => {
   card.dataset.gameId = game.id;
 
   const statusDot = clone.querySelector("[data-status]");
-  statusDot.dataset.status = game.status;
+  statusDot.dataset.status = safeStatus(game.status);
 
   const statusLabel = clone.querySelector("[data-status-label]");
-  statusLabel.textContent = statusLabels[game.status] ?? "Unknown";
+  const status = safeStatus(game.status);
+  statusLabel.textContent = statusLabels[status] ?? "Unknown";
 
   clone.querySelector("[data-title]").textContent = game.title;
   clone.querySelector("[data-description]").textContent = game.description ?? "No description provided.";
   clone.querySelector("[data-tags]").textContent = formatTags(game.tags);
   clone.querySelector("[data-duration]").textContent = game.estimatedSession ?? "Length TBD";
+  clone.querySelector("[data-updated]").textContent = game.lastUpdated
+    ? `Updated ${game.lastUpdated}`
+    : "Awaiting first update";
 
   const launchLink = clone.querySelector("[data-launch]");
   launchLink.href = game.launchPath;
@@ -83,17 +129,30 @@ const renderGames = () => {
   const filter = {
     status: els.statusFilter.value,
     query: els.searchInput.value.toLowerCase().trim(),
+    sort: els.sortSelect.value,
   };
 
-  const filtered = games.filter((game) => {
-    if (!validateGame(game)) return false;
-    const matchesStatus = filter.status === "all" || game.status === filter.status;
-    const matchesQuery =
-      !filter.query ||
-      game.title.toLowerCase().includes(filter.query) ||
-      (game.tags ?? []).some((tag) => tag.toLowerCase().includes(filter.query));
-    return matchesStatus && matchesQuery;
-  });
+  const filtered = games
+    .filter((game) => {
+      if (!validateGame(game)) return false;
+      const matchesStatus = filter.status === "all" || game.status === filter.status;
+      const matchesQuery =
+        !filter.query ||
+        game.title.toLowerCase().includes(filter.query) ||
+        (game.tags ?? []).some((tag) => tag.toLowerCase().includes(filter.query));
+      return matchesStatus && matchesQuery;
+    })
+    .sort((a, b) => {
+      if (filter.sort === "title") {
+        return a.title.localeCompare(b.title);
+      }
+      if (filter.sort === "status") {
+        return safeStatus(a.status).localeCompare(safeStatus(b.status));
+      }
+      const dateA = new Date(a.lastUpdated ?? 0).getTime();
+      const dateB = new Date(b.lastUpdated ?? 0).getTime();
+      return dateB - dateA;
+    });
 
   filtered.forEach((game) => {
     const cardNode = hydrateGameCard(game, template);
@@ -102,8 +161,14 @@ const renderGames = () => {
 
   els.emptyState.hidden = filtered.length !== 0;
   metrics.renderDuration = Math.round(performance.now() - start);
+  metrics.filterDuration = metrics.renderDuration;
+  metrics.renderCount += 1;
+  metrics.cardsRendered = filtered.length;
+  metrics.lastRefresh = metrics.lastRefresh ?? new Date();
   updateCounters(filtered.length);
+  updateFilterChips(filter);
   updateMetricsPanel();
+  updateSessionInsights();
 };
 
 const updateCounters = (loadedCount = games.length) => {
@@ -117,6 +182,56 @@ const updateMetricsPanel = () => {
   els.metricRender.textContent = metrics.renderDuration;
   els.metricWarnings.textContent = metrics.warnings;
   els.metricErrors.textContent = metrics.errors;
+  els.metricCards.textContent = metrics.cardsRendered;
+  els.metricFilter.textContent = metrics.filterDuration;
+};
+
+const updateSessionInsights = () => {
+  els.renderCount.textContent = metrics.renderCount;
+  els.lastInteraction.textContent = metrics.lastInteraction
+    ? metrics.lastInteraction.toLocaleTimeString()
+    : "-";
+  els.lastRefresh.textContent = metrics.lastRefresh ? metrics.lastRefresh.toLocaleTimeString() : "-";
+};
+
+const trackInteraction = (reason) => {
+  metrics.lastInteraction = new Date();
+  recordIssue("info", `Interaction: ${reason}`);
+  updateSessionInsights();
+};
+
+const updateFilterChips = (filter) => {
+  const searchActive = Boolean(filter.query);
+  const statusActive = filter.status !== "all";
+
+  els.searchChip.hidden = !searchActive;
+  els.statusChip.hidden = !statusActive;
+
+  if (searchActive) {
+    els.searchChip.textContent = `Search: "${filter.query}"`;
+  }
+  if (statusActive) {
+    els.statusChip.textContent = `Status: ${statusLabels[filter.status] ?? filter.status}`;
+  }
+
+  const active = [];
+  if (statusActive) active.push(statusLabels[filter.status] ?? filter.status);
+  if (searchActive) active.push(`"${filter.query}"`);
+  els.activeFilters.textContent = active.length ? active.join(" · ") : "All";
+
+  if (metrics.warnings > 0) {
+    els.healthChip.textContent = `Warnings detected (${metrics.warnings})`;
+    els.healthChip.classList.add("warn");
+    els.healthChip.classList.remove("success", "error");
+  } else if (metrics.errors > 0) {
+    els.healthChip.textContent = `Errors detected (${metrics.errors})`;
+    els.healthChip.classList.add("error");
+    els.healthChip.classList.remove("success", "warn");
+  } else {
+    els.healthChip.textContent = "Diagnostics idle";
+    els.healthChip.classList.add("success");
+    els.healthChip.classList.remove("warn", "error");
+  }
 };
 
 const toggleMetrics = () => {
@@ -132,6 +247,11 @@ const toggleMetrics = () => {
 const resetFilters = () => {
   els.statusFilter.value = "all";
   els.searchInput.value = "";
+  els.sortSelect.value = "recent";
+  [STORAGE_KEYS.status, STORAGE_KEYS.search, STORAGE_KEYS.sort].forEach((key) =>
+    writePreference(key, "")
+  );
+  trackInteraction("Filters cleared");
   renderGames();
 };
 
@@ -152,13 +272,28 @@ const openReportDialog = (game) => {
 };
 
 const bindEvents = () => {
-  els.statusFilter.addEventListener("change", renderGames);
+  els.statusFilter.addEventListener("change", () => {
+    writePreference(STORAGE_KEYS.status, els.statusFilter.value);
+    trackInteraction("Status filter change");
+    renderGames();
+  });
+  els.sortSelect.addEventListener("change", () => {
+    writePreference(STORAGE_KEYS.sort, els.sortSelect.value);
+    trackInteraction("Sort change");
+    renderGames();
+  });
   els.searchInput.addEventListener("input", () => {
     window.clearTimeout(window.__searchTimer);
-    window.__searchTimer = window.setTimeout(renderGames, 120);
+    window.__searchTimer = window.setTimeout(() => {
+      writePreference(STORAGE_KEYS.search, els.searchInput.value);
+      trackInteraction("Search query");
+      renderGames();
+    }, 120);
   });
   els.refreshButton.addEventListener("click", () => {
     recordIssue("info", "Manual refresh triggered");
+    metrics.lastRefresh = new Date();
+    updateSessionInsights();
     renderGames();
   });
   els.clearFiltersButton.addEventListener("click", resetFilters);
@@ -171,6 +306,7 @@ const captureElements = () => {
   els.errorCount = safeGetElement("errorCount");
   els.gameList = safeGetElement("gameList");
   els.statusFilter = safeGetElement("statusFilter");
+  els.sortSelect = safeGetElement("sortSelect");
   els.searchInput = safeGetElement("searchInput");
   els.emptyState = safeGetElement("emptyState");
   els.clearFiltersButton = safeGetElement("clearFiltersButton");
@@ -179,9 +315,44 @@ const captureElements = () => {
   els.metricRender = safeGetElement("metricRender");
   els.metricWarnings = safeGetElement("metricWarnings");
   els.metricErrors = safeGetElement("metricErrors");
+  els.metricCards = safeGetElement("metricCards");
+  els.metricFilter = safeGetElement("metricFilter");
   els.eventLog = safeGetElement("eventLog");
   els.toggleMetricsButton = safeGetElement("toggleMetricsButton");
   els.refreshButton = safeGetElement("refreshButton");
+  els.activeFilters = safeGetElement("activeFilters");
+  els.healthChip = safeGetElement("healthChip");
+  els.searchChip = safeGetElement("searchChip");
+  els.statusChip = safeGetElement("statusChip");
+  els.persistedNotice = safeGetElement("persistedNotice");
+  els.lastInteraction = safeGetElement("lastInteraction");
+  els.renderCount = safeGetElement("renderCount");
+  els.lastRefresh = safeGetElement("lastRefresh");
+};
+
+const loadPreferences = () => {
+  const persistedStatus = readPreference(STORAGE_KEYS.status);
+  const persistedSearch = readPreference(STORAGE_KEYS.search);
+  const persistedSort = readPreference(STORAGE_KEYS.sort);
+
+  let restored = false;
+  if (persistedStatus && els.statusFilter.querySelector(`[value="${persistedStatus}"]`)) {
+    els.statusFilter.value = persistedStatus;
+    restored = true;
+  }
+  if (typeof persistedSearch === "string") {
+    els.searchInput.value = persistedSearch;
+    restored = restored || Boolean(persistedSearch);
+  }
+  if (persistedSort && els.sortSelect.querySelector(`[value="${persistedSort}"]`)) {
+    els.sortSelect.value = persistedSort;
+    restored = true;
+  }
+
+  els.persistedNotice.hidden = !restored;
+  if (restored) {
+    recordIssue("info", "Restored saved filters");
+  }
 };
 
 const ensureComingSoonWarning = () => {
@@ -199,9 +370,11 @@ const ensureComingSoonWarning = () => {
 
 const bootstrap = () => {
   captureElements();
+  loadPreferences();
   bindEvents();
   ensureComingSoonWarning();
   renderGames();
+  updateSessionInsights();
 };
 
 window.addEventListener("error", (event) => {
