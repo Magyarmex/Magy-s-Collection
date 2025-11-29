@@ -9,8 +9,13 @@ const metrics = {
   cardsRendered: 0,
   warnings: 0,
   errors: 0,
+  missingElements: 0,
+  preferenceFaults: 0,
+  registryFlags: 0,
+  slowRenders: 0,
   lastInteraction: null,
   lastRefresh: null,
+  lastIssue: "None logged",
   log: [],
 };
 
@@ -33,6 +38,7 @@ const safeGetElement = (id) => {
   const el = document.getElementById(id);
   if (!el) {
     recordIssue("error", `Missing element #${id}`);
+    metrics.missingElements += 1;
   }
   return el;
 };
@@ -45,6 +51,7 @@ function recordIssue(level, message, data = null) {
   metrics.warnings = counters.warn;
   appendLog(entry);
   updateCounters();
+  updateStatusDetails();
   if (els.statusFilter && els.searchInput) {
     updateFilterChips({
       status: els.statusFilter.value,
@@ -211,6 +218,7 @@ const readPreference = (key) => {
   try {
     return window.localStorage.getItem(key);
   } catch (error) {
+    metrics.preferenceFaults += 1;
     recordIssue("warn", "Unable to read preference", { key, message: error.message });
     return null;
   }
@@ -220,6 +228,7 @@ const writePreference = (key, value) => {
   try {
     window.localStorage.setItem(key, value);
   } catch (error) {
+    metrics.preferenceFaults += 1;
     recordIssue("warn", "Unable to persist preference", { key, message: error.message });
   }
 };
@@ -333,6 +342,10 @@ const renderGames = () => {
   metrics.filterDuration = metrics.renderDuration;
   metrics.renderCount += 1;
   metrics.cardsRendered = filtered.length;
+  if (metrics.renderDuration > 140) {
+    metrics.slowRenders += 1;
+    recordIssue("warn", `Render exceeded budget: ${metrics.renderDuration}ms`);
+  }
   metrics.lastRefresh = metrics.lastRefresh ?? new Date();
   debugHub.metric("render.duration", metrics.renderDuration);
   debugHub.metric("filter.duration", metrics.filterDuration);
@@ -352,6 +365,12 @@ const updateCounters = (loadedCount = games.length) => {
   els.errorCount.textContent = metrics.errors;
 };
 
+const updateStatusDetails = () => {
+  if (els.lastIssue) {
+    els.lastIssue.textContent = metrics.lastIssue || "None logged";
+  }
+};
+
 const updateMetricsPanel = () => {
   els.metricPageReady.textContent = Math.round(performance.now() - metrics.startedAt);
   els.metricRender.textContent = metrics.renderDuration;
@@ -359,6 +378,10 @@ const updateMetricsPanel = () => {
   els.metricErrors.textContent = metrics.errors;
   els.metricCards.textContent = metrics.cardsRendered;
   els.metricFilter.textContent = metrics.filterDuration;
+  els.metricRegistryFlags.textContent = metrics.registryFlags;
+  els.metricMissing.textContent = metrics.missingElements;
+  els.metricPrefs.textContent = metrics.preferenceFaults;
+  els.metricSlowRenders.textContent = metrics.slowRenders;
 };
 
 const updateSessionInsights = () => {
@@ -533,6 +556,10 @@ const captureElements = () => {
   els.metricErrors = safeGetElement("metricErrors");
   els.metricCards = safeGetElement("metricCards");
   els.metricFilter = safeGetElement("metricFilter");
+  els.metricRegistryFlags = safeGetElement("metricRegistryFlags");
+  els.metricMissing = safeGetElement("metricMissing");
+  els.metricPrefs = safeGetElement("metricPrefs");
+  els.metricSlowRenders = safeGetElement("metricSlowRenders");
   els.eventLog = safeGetElement("eventLog");
   els.toggleMetricsButton = safeGetElement("toggleMetricsButton");
   els.refreshButton = safeGetElement("refreshButton");

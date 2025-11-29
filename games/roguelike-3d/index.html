@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arcane Rift: Doomcaster</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Fantasy FPS</p>
+      <h1>Arcane Rift: Doomcaster</h1>
+      <p class="lede">
+        A first-person, Doom-inspired fantasy shooter. Strafe, blast, grab power seals, and keep the run alive.
+        Click the viewport to lock the mouse, WASD to move, Shift to sprint, Space to dash, and left click to fire.
+      </p>
+    </div>
+    <div class="cta-group">
+      <button id="startRun" class="primary">Start new run</button>
+      <button id="healthCheck" class="ghost">Diagnostics</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel play-panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Dungeon Instance</p>
+          <h2>Render Bay</h2>
+        </div>
+        <div class="status-pill" id="phaseBadge">Idle</div>
+      </div>
+
+      <div class="viewport" id="renderSurface">
+        <canvas id="gameCanvas" width="960" height="600" aria-label="Arcane Rift gameplay canvas"></canvas>
+
+        <div class="hud" aria-live="polite">
+          <div class="bars">
+            <div class="bar health"><span id="healthValue">100</span></div>
+            <div class="bar armor"><span id="armorValue">50</span></div>
+            <div class="bar ammo"><span id="ammoValue">80</span></div>
+          </div>
+
+          <div class="hud-top">
+            <div class="chip">Wave <span id="waveLabel">1</span></div>
+            <div class="chip">Score <span id="scoreLabel">0</span></div>
+            <div class="chip">Enemies <span id="enemyLabel">0</span></div>
+            <div class="chip">Relics <span id="relicLabel">0</span></div>
+          </div>
+
+          <div class="hud-bottom">
+            <div class="cluster">
+              <div class="chip subtle">Fire rate <span id="fireRateLabel">1.0x</span></div>
+              <div class="chip subtle">Damage <span id="damageLabel">1.0x</span></div>
+              <div class="chip subtle">Move <span id="speedLabel">1.0x</span></div>
+            </div>
+            <div class="chip pulse" id="callout">Click to lock mouse. WASD to move, Shift to sprint, Space to dash.</div>
+          </div>
+        </div>
+
+        <div class="vfx-layer vignette" aria-hidden="true"></div>
+        <div class="vfx-layer scanlines" aria-hidden="true"></div>
+        <div class="vfx-layer damage-flash" id="damageFlash" aria-hidden="true"></div>
+        <div class="vfx-layer hitmarker" id="hitMarker" aria-hidden="true"></div>
+        <div class="vfx-layer muzzle" id="muzzleFlash" aria-hidden="true"></div>
+        <div class="floating-hints" aria-live="polite">
+          <div class="hint" id="waveBanner">Wave 1</div>
+          <div class="hint muted" id="hintLow">Stay topped off.</div>
+        </div>
+
+        <div id="perkDraft" class="draft" aria-live="polite">
+          <div class="draft-card">
+            <p class="eyebrow">Relic Draft</p>
+            <h3>Choose a blessing</h3>
+            <p class="muted">Clearing a wave lets you bind a relic. Stack wisely.</p>
+            <div id="perkOptions" class="draft-grid"></div>
+          </div>
+        </div>
+
+        <div id="pauseOverlay" class="overlay hidden">
+          <div class="overlay-card">
+            <h3>Run paused</h3>
+            <p class="muted">Press P to resume. Use this time to breathe and plan.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="subgrid">
+        <div class="tile">
+          <p class="eyebrow">Loop Targets</p>
+            <ul>
+              <li>Strafe through demon waves in a billboarding, raycast arena.</li>
+              <li>Draft relics to push fire rate, armor, damage, or pickup reach.</li>
+              <li>Collect ammo and health shards to keep momentum between waves.</li>
+              <li>Watch the FPS, heartbeat, and toast feeds to keep the slice healthy.</li>
+            </ul>
+        </div>
+        <div class="tile">
+          <p class="eyebrow">Debug Channels</p>
+          <ul id="debugChannels">
+            <li>Metrics console attached to <code>window.__gameHubMetrics</code>.</li>
+            <li>Error trapper with toast surface and log mirror.</li>
+            <li>Heartbeat ticker for runtime drift + FPS sampler.</li>
+            <li>Per-wave telemetry: kills, hits taken, healing ticks.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel slim">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Run Services</p>
+          <h2>Telemetry + Logs</h2>
+        </div>
+        <button id="clearLog" class="ghost">Clear log</button>
+      </div>
+
+      <div class="stack">
+        <div class="card">
+          <p class="eyebrow">Build status</p>
+          <ul class="statuses" id="statusList"></ul>
+        </div>
+        <div class="card">
+          <p class="eyebrow">Runtime log</p>
+          <div class="log" id="runtimeLog" aria-live="polite"></div>
+        </div>
+        <div class="card">
+          <p class="eyebrow">Metrics</p>
+          <dl class="metrics" id="metrics"></dl>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" role="status" aria-live="assertive"></div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

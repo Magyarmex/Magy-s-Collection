@@ -3,25 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Arcade Launcher | D&D but bad</title>
+  <title>Retro Arcade Nexus | D&D but bad</title>
   <link rel="stylesheet" href="styles/main.css" />
 </head>
 <body>
   <header class="site-header">
     <div class="branding">
-      <div class="logo" aria-hidden="true">🎮</div>
+      <div class="logo" aria-hidden="true" aria-label="Pixel portal">🕹️</div>
       <div>
-        <p class="eyebrow">Web arcade</p>
-        <h1>D&D but bad</h1>
-        <p class="tagline">A cozy home for small, experimental web games.</p>
+        <p class="eyebrow">Retro Web Arcade</p>
+        <h1>Bit-Crafted Realms</h1>
+        <p class="tagline">Enter a pixel portal of weird experiments and homebrew quests.</p>
       </div>
     </div>
     <div class="header-actions">
       <button id="refreshButton" type="button" class="ghost-button" aria-label="Refresh game list">
-        Refresh
+        Respawn List
       </button>
       <button id="toggleMetricsButton" type="button" class="ghost-button" aria-expanded="false">
-        Metrics
+        Debug HUD
       </button>
       <button id="debugMenuButton" type="button" class="ghost-button" aria-expanded="false">
         Debug menu
@@ -31,25 +31,28 @@
 
   <main>
     <section class="hero">
-      <div class="hero-copy">
-        <p class="pill pulse">Now with richer layout + debug tools</p>
-        <h2>Pick a prototype and press play</h2>
-        <p>
-          Each tile below is a launch pad to a small browser-based game. New experiments will
-          live here as they are built.
-        </p>
-        <div class="utility-row" aria-live="polite">
-          <div class="utility-chip">
-            <span class="label">Active filters</span>
-            <span id="activeFilters" class="value">All</span>
-          </div>
-          <div class="utility-chip">
-            <span class="label">Last interaction</span>
-            <span id="lastInteraction" class="value">-</span>
-          </div>
-          <div class="utility-chip">
-            <span class="label">Render count</span>
-            <span id="renderCount" class="value">0</span>
+      <div class="crt">
+        <div class="scanline"></div>
+        <div class="hero-copy">
+          <p class="pill pulse">8-bit tuned · Debug-ready</p>
+          <h2>Load a quest, mash start</h2>
+          <p>
+            Kick off tiny browser adventures from a neon control panel. Swap filters, spot errors fast, and
+            keep the arcade humming.
+          </p>
+          <div class="utility-row" aria-live="polite">
+            <div class="utility-chip">
+              <span class="label">Active filters</span>
+              <span id="activeFilters" class="value">All</span>
+            </div>
+            <div class="utility-chip">
+              <span class="label">Last interaction</span>
+              <span id="lastInteraction" class="value">-</span>
+            </div>
+            <div class="utility-chip">
+              <span class="label">Render count</span>
+              <span id="renderCount" class="value">0</span>
+            </div>
           </div>
         </div>
       </div>
@@ -69,6 +72,10 @@
         <div class="status-row">
           <span class="label">Last refresh</span>
           <span id="lastRefresh" class="value">-</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Last issue</span>
+          <span id="lastIssue" class="value">None logged</span>
         </div>
       </div>
     </section>
@@ -145,6 +152,22 @@
         <div>
           <dt>Filter latency (ms)</dt>
           <dd id="metricFilter">-</dd>
+        </div>
+        <div>
+          <dt>Registry flags</dt>
+          <dd id="metricRegistryFlags">0</dd>
+        </div>
+        <div>
+          <dt>Missing elements</dt>
+          <dd id="metricMissing">0</dd>
+        </div>
+        <div>
+          <dt>Preference faults</dt>
+          <dd id="metricPrefs">0</dd>
+        </div>
+        <div>
+          <dt>Slow renders flagged</dt>
+          <dd id="metricSlowRenders">0</dd>
         </div>
       </dl>
       <details>
