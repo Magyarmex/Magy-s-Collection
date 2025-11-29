@@ -7,6 +7,11 @@ const metricsList = document.getElementById("metrics");
 const phaseBadge = document.getElementById("phaseBadge");
 const toast = document.getElementById("toast");
 const pauseOverlay = document.getElementById("pauseOverlay");
+const damageFlash = document.getElementById("damageFlash");
+const hitMarker = document.getElementById("hitMarker");
+const muzzleFlash = document.getElementById("muzzleFlash");
+const waveBanner = document.getElementById("waveBanner");
+const hintLow = document.getElementById("hintLow");
 
 const hudElements = {
   health: document.getElementById("healthValue"),
@@ -30,10 +35,26 @@ const metrics = {
   errors: [],
   frames: 0,
   fps: 0,
+  avgFps: 0,
+  minFps: Number.POSITIVE_INFINITY,
+  maxFps: 0,
   hitsTaken: 0,
   heals: 0,
   kills: 0,
   shotsFired: 0,
+  renderFaults: 0,
+  audioFaults: 0,
+  soundsPlayed: 0,
+  spriteOcclusions: 0,
+  waveDurations: [],
+  frameBuffer: [],
+};
+
+const effects = {
+  damageFlash: 0,
+  hitMarker: 0,
+  muzzleFlash: 0,
+  waveBanner: 0,
 };
 
 const statuses = [
@@ -56,12 +77,36 @@ const palette = {
   muzzle: "#ffdd55",
 };
 
+const spriteAtlas = {
+  enemy: {
+    imp: { base: "#ef6b6b", accent: "#ffb4b4", glow: "#7c2d2d", size: 1.0, icon: "✦" },
+    knight: { base: "#7dd0ff", accent: "#c0e7ff", glow: "#1f4b6f", size: 1.05, icon: "❖" },
+    wraith: { base: "#d59bff", accent: "#f4e2ff", glow: "#4a2d6b", size: 0.95, icon: "✜" },
+  },
+  loot: {
+    health: { base: "#38ef8b", accent: "#a9ffd1", glow: "#0b3b2b", size: 0.8, icon: "✚" },
+    ammo: { base: "#f7c948", accent: "#fff4c2", glow: "#5c4307", size: 0.8, icon: "✷" },
+    relic: { base: "#8bc2ff", accent: "#d8ecff", glow: "#113a5b", size: 0.95, icon: "⚝" },
+  },
+  projectile: {
+    player: { base: "#ffeb99", accent: "#fff6d5", glow: "#5b4307", size: 0.35, icon: "•" },
+    enemy: { base: "#ff6b9d", accent: "#ffc7dc", glow: "#5b1230", size: 0.35, icon: "•" },
+  },
+};
+
 const input = {
   keys: new Set(),
   mouseDeltaX: 0,
   fireHeld: false,
   paused: false,
   locked: false,
+};
+
+const audio = {
+  ctx: null,
+  master: null,
+  buffers: {},
+  enabled: false,
 };
 
 const player = {
@@ -119,6 +164,11 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 const formatTime = (timestamp) => `${(timestamp / 1000).toFixed(2)}s`;
 
+const setCallout = (text, emphasis = false) => {
+  hudElements.callout.textContent = text;
+  hudElements.callout.classList.toggle("emphasis", emphasis);
+};
+
 const renderStatuses = () => {
   statusList.innerHTML = statuses
     .map(
@@ -148,6 +198,25 @@ const showToast = (message) => {
   setTimeout(() => toast.classList.remove("show"), 2600);
 };
 
+const effectElements = { damageFlash, hitMarker, muzzleFlash, waveBanner };
+
+const pulseEffect = (name, duration = 0.4) => {
+  effects[name] = duration;
+  const el = effectElements[name];
+  if (el) el.classList.add("active");
+};
+
+const updateEffects = (dt) => {
+  Object.entries(effects).forEach(([key, value]) => {
+    if (value <= 0) return;
+    effects[key] = Math.max(0, value - dt);
+    if (effects[key] === 0) {
+      const el = effectElements[key];
+      if (el) el.classList.remove("active");
+    }
+  });
+};
+
 const recordWarning = (message, data) => {
   metrics.warnings.push({ message, data, at: performance.now() });
   logEvent(message, "warn");
@@ -160,6 +229,59 @@ const recordError = (message, data) => {
   renderMetrics();
 };
 
+const initAudio = () => {
+  if (audio.ctx) return;
+  try {
+    audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    audio.master = audio.ctx.createGain();
+    audio.master.gain.value = 0.25;
+    audio.master.connect(audio.ctx.destination);
+    audio.enabled = true;
+    const createTone = (freq, duration, type = "sine") => {
+      const length = Math.floor(audio.ctx.sampleRate * duration);
+      const buffer = audio.ctx.createBuffer(1, length, audio.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < length; i++) {
+        const t = i / audio.ctx.sampleRate;
+        data[i] = Math.sin(2 * Math.PI * freq * t) * Math.exp(-3 * t);
+      }
+      buffer.type = type;
+      return buffer;
+    };
+    audio.buffers = {
+      fire: createTone(280, 0.12, "sawtooth"),
+      hit: createTone(640, 0.08, "triangle"),
+      hurt: createTone(120, 0.25, "sine"),
+      pickup: createTone(520, 0.18, "square"),
+      relic: createTone(410, 0.3, "triangle"),
+      wave: createTone(220, 0.28, "square"),
+    };
+  } catch (error) {
+    recordWarning("Audio initialization failed", { message: error.message });
+    metrics.audioFaults += 1;
+  }
+};
+
+const playSound = (name, rate = 1, volume = 1) => {
+  if (!audio.enabled) return;
+  try {
+    if (audio.ctx.state === "suspended") audio.ctx.resume();
+    const buffer = audio.buffers[name];
+    if (!buffer) return;
+    const source = audio.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = rate;
+    const gain = audio.ctx.createGain();
+    gain.gain.value = volume;
+    source.connect(gain).connect(audio.master);
+    source.start();
+    metrics.soundsPlayed += 1;
+  } catch (error) {
+    metrics.audioFaults += 1;
+    recordWarning("Sound playback failed", { name, message: error.message });
+  }
+};
+
 const mark = (label) => {
   metrics.marks[label] = performance.now();
   renderMetrics();
@@ -170,11 +292,18 @@ const renderMetrics = () => {
     ["Started", formatTime(metrics.startedAt)],
     ["Run start", metrics.marks.runStart ? formatTime(metrics.marks.runStart) : "pending"],
     ["FPS", metrics.fps.toFixed(1)],
+    ["Avg FPS", metrics.avgFps.toFixed(1)],
+    ["Floor/Peak", `${metrics.minFps === Number.POSITIVE_INFINITY ? "-" : metrics.minFps.toFixed(0)} / ${metrics.maxFps.toFixed(0)}`],
     ["Frames", metrics.frames],
     ["Kills", metrics.kills],
     ["Shots", metrics.shotsFired],
     ["Hits taken", metrics.hitsTaken],
     ["Heals", metrics.heals],
+    ["Render faults", metrics.renderFaults],
+    ["Audio faults", metrics.audioFaults],
+    ["Sounds", metrics.soundsPlayed],
+    ["Sprite occl.", metrics.spriteOcclusions],
+    ["Last wave", metrics.waveDurations.length ? `${metrics.waveDurations[metrics.waveDurations.length - 1].toFixed(2)}s` : "-"],
     ["Warnings", metrics.warnings.length],
     ["Errors", metrics.errors.length],
   ];
@@ -260,6 +389,11 @@ const spawnWave = () => {
   game.enemies.push(...roster);
   hudElements.enemies.textContent = game.enemies.length;
   logEvent(`Wave ${game.wave} spawns ${roster.length} foes.`);
+  game.waveStart = performance.now();
+  waveBanner.textContent = `Wave ${game.wave}`;
+  pulseEffect("waveBanner", 1.6);
+  phaseBadge.dataset.state = "active";
+  playSound("wave", 0.9, 0.7);
 };
 
 const addLoot = (x, y, type) => {
@@ -268,6 +402,7 @@ const addLoot = (x, y, type) => {
 
 const startRun = () => {
   try {
+    initAudio();
     initGrid();
     resetPlayer();
     game.enemies = [];
@@ -281,10 +416,18 @@ const startRun = () => {
     metrics.heals = 0;
     metrics.hitsTaken = 0;
     metrics.shotsFired = 0;
+    metrics.soundsPlayed = 0;
+    metrics.audioFaults = 0;
+    metrics.spriteOcclusions = 0;
+    metrics.frameBuffer = [];
+    metrics.minFps = Number.POSITIVE_INFINITY;
+    metrics.maxFps = 0;
+    metrics.waveDurations = [];
     hudElements.wave.textContent = game.wave;
     hudElements.score.textContent = game.score;
     hudElements.relics.textContent = game.relics.length;
     phaseBadge.textContent = "Running";
+    phaseBadge.dataset.state = "active";
     mark("runStart");
     spawnWave();
     game.running = true;
@@ -358,6 +501,9 @@ const fire = () => {
     ttl: 4,
   });
   hudElements.ammo.textContent = player.ammo;
+  setCallout(player.ammo < 12 ? "Ammo low: prioritize pickups." : "On target. Keep moving.");
+  pulseEffect("muzzleFlash", 0.18);
+  playSound("fire", 1 + Math.random() * 0.06, 0.8);
 };
 
 const spawnEnemyShot = (enemy, targetX, targetY) => {
@@ -372,6 +518,26 @@ const spawnEnemyShot = (enemy, targetX, targetY) => {
     owner: "enemy",
     ttl: 5,
   });
+  playSound("fire", 0.7, 0.55);
+};
+
+const applyDamage = (damage) => {
+  const absorbed = Math.min(player.armor, damage * 0.6);
+  player.armor = clamp(player.armor - absorbed, 0, 120);
+  player.health -= damage - absorbed;
+  metrics.hitsTaken += 1;
+  hudElements.health.textContent = Math.max(0, Math.round(player.health));
+  hudElements.armor.textContent = Math.round(player.armor);
+  pulseEffect("damageFlash", 0.45);
+  playSound("hurt", 1, 0.6);
+  setCallout(player.health <= player.maxHealth * 0.3 ? "Health critical: find shards!" : "Stay mobile to avoid hits.", true);
+  hintLow.textContent = player.health <= player.maxHealth * 0.3 ? "Critical: route toward shards." : "Armor is absorbing damage.";
+  hintLow.classList.toggle("show", player.health <= player.maxHealth * 0.45);
+  if (player.health <= 0) {
+    endRun("You were shattered in the Rift.");
+    return false;
+  }
+  return true;
 };
 
 const updateProjectiles = (dt) => {
@@ -391,6 +557,8 @@ const updateProjectiles = (dt) => {
         if (d < 0.5) {
           enemy.health -= proj.damage;
           proj.ttl = 0;
+          pulseEffect("hitMarker", 0.25);
+          playSound("hit", 1 + Math.random() * 0.1, 0.55);
           if (enemy.health <= 0) {
             metrics.kills += 1;
             game.score += 50;
@@ -403,18 +571,8 @@ const updateProjectiles = (dt) => {
     } else if (proj.owner === "enemy") {
       const d = Math.hypot(player.x - proj.x, player.y - proj.y);
       if (d < 0.4) {
-        const damage = proj.damage;
-        const absorbed = Math.min(player.armor, damage * 0.6);
-        player.armor = clamp(player.armor - absorbed, 0, 120);
-        player.health -= damage - absorbed;
-        metrics.hitsTaken += 1;
-        hudElements.health.textContent = Math.max(0, Math.round(player.health));
-        hudElements.armor.textContent = Math.round(player.armor);
         proj.ttl = 0;
-        if (player.health <= 0) {
-          endRun("You were shattered in the Rift.");
-          return false;
-        }
+        if (!applyDamage(proj.damage)) return false;
       }
     }
     return proj.ttl > 0;
@@ -456,16 +614,22 @@ const updateLoot = (dt) => {
         player.health = clamp(player.health + heal, 0, player.maxHealth);
         metrics.heals += 1;
         hudElements.health.textContent = player.health;
+        setCallout("Vital shard recovered. Push forward.", true);
+        playSound("pickup", 1.05, 0.55);
       }
       if (drop.type === "ammo") {
         player.ammo += 12;
         hudElements.ammo.textContent = player.ammo;
+        setCallout("Ammo cache secured. Reload the fight.");
+        playSound("pickup", 0.95, 0.6);
       }
       if (drop.type === "relic") {
         game.relics.push(drop.detail);
         drop.detail.apply();
         hudElements.relics.textContent = game.relics.length;
         showToast(`${drop.detail.name} bound.`);
+        setCallout(drop.detail.detail, true);
+        playSound("relic", 1, 0.7);
       }
       drop.ttl = 0;
     }
@@ -475,9 +639,16 @@ const updateLoot = (dt) => {
 
 const checkWaveClear = () => {
   if (game.enemies.length === 0 && !game.awaitingRelic) {
+    const elapsed = game.waveStart ? (performance.now() - game.waveStart) / 1000 : 0;
+    if (elapsed > 0) {
+      metrics.waveDurations.push(elapsed);
+      logEvent(`Wave ${game.wave} cleared in ${elapsed.toFixed(2)}s.`);
+    }
     game.wave += 1;
     hudElements.wave.textContent = game.wave;
     game.awaitingRelic = true;
+    setCallout("Wave cleared! Draft a relic.", true);
+    playSound("wave", 1.1, 0.65);
     promptRelic();
   }
 };
@@ -502,19 +673,40 @@ const updateHud = () => {
   hudElements.health.parentElement.style.setProperty("--fill", `${(player.health / player.maxHealth) * 100}%`);
   hudElements.armor.parentElement.style.setProperty("--fill", `${(player.armor / 120) * 100}%`);
   hudElements.ammo.parentElement.style.setProperty("--fill", `${Math.min(100, (player.ammo / 120) * 100)}%`);
+  if (player.ammo < 10) {
+    hintLow.classList.add("show");
+    hintLow.textContent = "Ammo cache needed soon.";
+  } else if (player.health > player.maxHealth * 0.45) {
+    hintLow.classList.remove("show");
+  }
 };
 
 const endRun = (message) => {
   game.running = false;
   phaseBadge.textContent = "Down";
+  phaseBadge.dataset.state = "alert";
   showToast(message);
   logEvent(message, "error");
 };
 
 const renderBackground = () => {
-  ctx.fillStyle = palette.sky;
+  const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height / 2);
+  skyGradient.addColorStop(0, "#0c1027");
+  skyGradient.addColorStop(1, palette.sky);
+  ctx.fillStyle = skyGradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
-  ctx.fillStyle = palette.floor;
+
+  const floorGradient = ctx.createRadialGradient(
+    canvas.width / 2,
+    canvas.height,
+    80,
+    canvas.width / 2,
+    canvas.height,
+    canvas.height / 1.2,
+  );
+  floorGradient.addColorStop(0, "#1a1425");
+  floorGradient.addColorStop(1, palette.floor);
+  ctx.fillStyle = floorGradient;
   ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
 };
 
@@ -580,9 +772,14 @@ const castWalls = () => {
 
 const renderSprites = () => {
   const sprites = [
-    ...game.enemies.map((e) => ({ x: e.x, y: e.y, color: enemyCatalog[e.type].color, size: 0.9 })),
-    ...game.projectiles.map((p) => ({ x: p.x, y: p.y, color: p.owner === "player" ? "#ffeb99" : "#ff6b9d", size: 0.3 })),
-    ...game.loot.map((l) => ({ x: l.x, y: l.y, color: l.type === "health" ? "#6bffb5" : l.type === "ammo" ? "#ffd86b" : "#8bc2ff", size: 0.6 })),
+    ...game.enemies.map((e) => ({ x: e.x, y: e.y, style: spriteAtlas.enemy[e.type], id: e.type })),
+    ...game.projectiles.map((p) => ({
+      x: p.x,
+      y: p.y,
+      style: spriteAtlas.projectile[p.owner === "player" ? "player" : "enemy"],
+      id: p.owner,
+    })),
+    ...game.loot.map((l) => ({ x: l.x, y: l.y, style: spriteAtlas.loot[l.type], id: l.type })),
   ];
 
   sprites.sort((a, b) => {
@@ -592,35 +789,65 @@ const renderSprites = () => {
   });
 
   for (const sprite of sprites) {
+    const style = sprite.style || spriteAtlas.loot.relic;
     const spriteX = sprite.x - player.x;
     const spriteY = sprite.y - player.y;
     const invDet = 1.0 / (player.planeX * player.dirY - player.dirX * player.planeY);
     const transformX = invDet * (player.dirY * spriteX - player.dirX * spriteY);
     const transformY = invDet * (-player.planeY * spriteX + player.planeX * spriteY);
-    if (transformY <= 0) continue;
+    if (transformY <= 0) {
+      metrics.spriteOcclusions += 1;
+      continue;
+    }
 
     const spriteScreenX = Math.floor((canvas.width / 2) * (1 + transformX / transformY));
-    const spriteHeight = Math.abs(Math.floor(canvas.height / transformY)) * sprite.size;
+    const baseHeight = Math.abs(Math.floor(canvas.height / transformY));
+    const spriteHeight = Math.max(28, baseHeight * style.size);
     const drawStartY = Math.max(-spriteHeight / 2 + canvas.height / 2, 0);
     const drawEndY = Math.min(spriteHeight / 2 + canvas.height / 2, canvas.height);
     const spriteWidth = spriteHeight;
     const drawStartX = Math.max(-spriteWidth / 2 + spriteScreenX, 0);
     const drawEndX = Math.min(spriteWidth / 2 + spriteScreenX, canvas.width);
 
+    const gradient = ctx.createLinearGradient(0, drawStartY, 0, drawEndY);
+    gradient.addColorStop(0, style.accent);
+    gradient.addColorStop(0.6, style.base);
+    gradient.addColorStop(1, style.glow);
+
+    let drawn = false;
     for (let stripe = drawStartX; stripe < drawEndX; stripe++) {
       if (transformY > 0 && stripe > 0 && stripe < canvas.width && transformY < game.zBuffer[stripe]) {
-        ctx.fillStyle = sprite.color;
+        ctx.fillStyle = gradient;
         ctx.fillRect(stripe, drawStartY, 1, drawEndY - drawStartY);
+        drawn = true;
       }
     }
+
+    if (!drawn) {
+      metrics.spriteOcclusions += 1;
+      continue;
+    }
+
+    ctx.save();
+    ctx.strokeStyle = `${style.accent}aa`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(drawStartX, drawStartY, drawEndX - drawStartX, drawEndY - drawStartY);
+    ctx.font = `${Math.max(14, spriteHeight * 0.3)}px "JetBrains Mono", monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#0b1020";
+    ctx.fillText(style.icon, spriteScreenX, (drawStartY + drawEndY) / 2 + 1);
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillText(style.icon, spriteScreenX, (drawStartY + drawEndY) / 2);
+    ctx.restore();
   }
 };
 
 const renderCrosshair = () => {
   const x = canvas.width / 2;
   const y = canvas.height / 2;
-  ctx.strokeStyle = palette.crosshair;
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = effects.hitMarker > 0 ? "#7c3aed" : palette.crosshair;
+  ctx.lineWidth = effects.hitMarker > 0 ? 3 : 2;
   ctx.beginPath();
   ctx.moveTo(x - 10, y);
   ctx.lineTo(x + 10, y);
@@ -645,18 +872,33 @@ const tick = (time) => {
     requestAnimationFrame(tick);
     return;
   }
-  metrics.frames += 1;
-  metrics.fps = 1 / dt;
-  if (player.weaponCooldown > 0) player.weaponCooldown -= dt;
+  try {
+    metrics.frames += 1;
+    metrics.fps = 1 / dt;
+    metrics.frameBuffer.push(metrics.fps);
+    if (metrics.frameBuffer.length > 120) metrics.frameBuffer.shift();
+    const sum = metrics.frameBuffer.reduce((acc, val) => acc + val, 0);
+    metrics.avgFps = metrics.frameBuffer.length ? sum / metrics.frameBuffer.length : 0;
+    metrics.minFps = Math.min(metrics.minFps, metrics.fps);
+    metrics.maxFps = Math.max(metrics.maxFps, metrics.fps);
+    if (player.weaponCooldown > 0) player.weaponCooldown -= dt;
 
-  handleInput(dt);
-  if (input.fireHeld) fire();
-  updateProjectiles(dt);
-  updateEnemies(dt);
-  updateLoot(dt);
-  checkWaveClear();
-  updateHud();
-  render();
+    handleInput(dt);
+    if (input.fireHeld) fire();
+    updateProjectiles(dt);
+    updateEnemies(dt);
+    updateLoot(dt);
+    checkWaveClear();
+    updateHud();
+    updateEffects(dt);
+    render();
+  } catch (error) {
+    metrics.renderFaults += 1;
+    recordError("Frame failure", { message: error.message, stack: error.stack, frame: metrics.frames });
+    phaseBadge.dataset.state = "alert";
+    showToast("Renderer fault detected. See log.");
+    return;
+  }
 
   requestAnimationFrame(tick);
 };
@@ -676,9 +918,11 @@ const bindControls = () => {
     if (e.code === "KeyP") {
       input.paused = !input.paused;
       pauseOverlay.classList.toggle("hidden", !input.paused);
+      phaseBadge.dataset.state = input.paused ? "alert" : "active";
       if (!input.paused) game.lastTime = performance.now();
     }
     if (input.paused) return;
+    if (!audio.ctx) initAudio();
     input.keys.add(e.code);
   });
 
@@ -687,6 +931,7 @@ const bindControls = () => {
   });
 
   canvas.addEventListener("mousedown", (e) => {
+    if (!audio.ctx) initAudio();
     if (!input.locked) requestPointerLock();
     if (e.button === 0) input.fireHeld = true;
   });
@@ -730,7 +975,8 @@ const init = () => {
   updateHud();
   render();
   logEvent("Arcane Rift: Doomcaster ready");
-  hudElements.callout.textContent = "Click the viewport to lock mouse. WASD to move, LMB to fire.";
+  phaseBadge.dataset.state = "ready";
+  setCallout("Click the viewport to lock mouse. WASD to move, LMB to fire.");
 };
 
 init();
